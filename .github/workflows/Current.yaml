@@ -35,13 +35,13 @@ jobs:
 
       - name: Initialize the workflow
         id: init
-        uses: freddydk/AL-Go/Actions/WorkflowInitialize@SettingsEnv
+        uses: freddydk/AL-Go/Actions/WorkflowInitialize@Settings2
         with:
           shell: powershell
           eventId: "DO0101"
 
       - name: Read settings
-        uses: freddydk/AL-Go/Actions/ReadSettings@SettingsEnv
+        uses: freddydk/AL-Go/Actions/ReadSettings@Settings2
         id: ReadSettings
         with:
           shell: powershell
@@ -51,11 +51,11 @@ jobs:
       - name: Determine Workflow Depth
         id: DetermineWorkflowDepth
         run: |
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "WorkflowDepth=$($env:workflowDepth)"
+          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "WorkflowDepth=$($env:workflowDepth)"
       
       - name: Determine Projects To Build
         id: determineProjectsToBuild
-        uses: freddydk/AL-Go/Actions/DetermineProjectsToBuild@SettingsEnv
+        uses: freddydk/AL-Go/Actions/DetermineProjectsToBuild@Settings2
         with:
           shell: powershell
           maxBuildDepth: ${{ env.workflowDepth }}
@@ -91,7 +91,7 @@ jobs:
 
       - name: Finalize the workflow
         id: PostProcess
-        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@SettingsEnv
+        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@Settings2
         with:
           shell: powershell
           eventId: "DO0101"

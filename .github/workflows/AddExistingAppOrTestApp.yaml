@@ -41,13 +41,13 @@ jobs:
 
       - name: Initialize the workflow
         id: init
-        uses: freddydk/AL-Go/Actions/WorkflowInitialize@SettingsEnv
+        uses: freddydk/AL-Go/Actions/WorkflowInitialize@Settings2
         with:
           shell: powershell
           eventId: "DO0090"
 
       - name: Read settings
-        uses: freddydk/AL-Go/Actions/ReadSettings@SettingsEnv
+        uses: freddydk/AL-Go/Actions/ReadSettings@Settings2
         id: ReadSettings
         if: github.event.inputs.useGhTokenWorkflow == 'true'
         with:
@@ -57,7 +57,7 @@ jobs:
           useBase64: 'Y'
 
       - name: Read secrets
-        uses: freddydk/AL-Go/Actions/ReadSecrets@SettingsEnv
+        uses: freddydk/AL-Go/Actions/ReadSecrets@Settings2
         if: github.event.inputs.useGhTokenWorkflow == 'true'
         env:
           secrets: ${{ toJson(secrets) }}
@@ -77,10 +77,10 @@ jobs:
           } else {
             $ghToken = '${{ secrets.GITHUB_TOKEN }}'
           }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "ghToken=$ghToken"
+          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "ghToken=$ghToken"
 
       - name: Add existing app
-        uses: freddydk/AL-Go/Actions/AddExistingApp@SettingsEnv
+        uses: freddydk/AL-Go/Actions/AddExistingApp@Settings2
         with:
           shell: powershell
           token: ${{ steps.CalculateToken.outputs.ghToken }}
@@ -91,7 +91,7 @@ jobs:
 
       - name: Finalize the workflow
         if: always()
-        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@SettingsEnv
+        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@Settings2
         with:
           shell: powershell
           eventId: "DO0090"
