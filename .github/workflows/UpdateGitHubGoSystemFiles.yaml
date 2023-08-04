@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       templateUrl:
-        description: Template Repository URL (current is https://github.com/freddydk/AL-Go@current)
+        description: Template Repository URL (current is https://github.com/freddydk/AL-Go@v3.0.1)
         required: false
         default: ''
       directCommit:
@@ -32,36 +32,38 @@ jobs:
 
       - name: Initialize the workflow
         id: init
-        uses: freddydk/AL-Go/Actions/WorkflowInitialize@current
+        uses: freddydk/AL-Go/Actions/WorkflowInitialize@v3.0.1
         with:
           shell: powershell
           eventId: "DO0098"
 
       - name: Read settings
-        uses: freddydk/AL-Go/Actions/ReadSettings@current
+        uses: freddydk/AL-Go/Actions/ReadSettings@v3.0.1
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
-          get: ghTokenWorkflowSecretName,templateUrl
+          get: keyVaultName,ghTokenWorkflowSecretName,templateUrl
 
       - name: Read secrets
-        uses: freddydk/AL-Go/Actions/ReadSecrets@current
+        uses: freddydk/AL-Go/Actions/ReadSecrets@v3.0.1
         env:
           secrets: ${{ toJson(secrets) }}
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
+          settingsJson: ${{ env.Settings }}
           secrets: 'ghTokenWorkflow=${{ env.GHTOKENWORKFLOWSECRETNAME }}'
 
       - name: Override templateUrl
         env:
           templateUrl: ${{ github.event.inputs.templateUrl }}
         run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $ErrorActionPreference = "STOP"
+          Set-StrictMode -version 2.0
           $templateUrl = $ENV:templateUrl
           if ($templateUrl) {
             Write-Host "Using Template Url: $templateUrl"
-            Add-Content -Encoding UTF8 -Path $env:GITHUB_ENV -Value "templateUrl=$templateUrl"
+            Add-Content -Path $env:GITHUB_ENV -Value "templateUrl=$templateUrl"
           }
 
       - name: Calculate DirectCommit
@@ -69,17 +71,18 @@ jobs:
           directCommit: ${{ github.event.inputs.directCommit }}
           eventName: ${{ github.event_name }}
         run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $ErrorActionPreference = "STOP"
+          Set-StrictMode -version 2.0
           $directCommit = $ENV:directCommit
           Write-Host $ENV:eventName
           if ($ENV:eventName -eq 'schedule') {
             Write-Host "Running Update AL-Go System Files on a schedule. Setting DirectCommit = Y"
             $directCommit = 'Y'
           }
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_ENV -Value "DirectCommit=$directCommit"
+          Add-Content -Path $env:GITHUB_ENV -Value "DirectCommit=$directCommit"
 
       - name: Update AL-Go system files
-        uses: freddydk/AL-Go/Actions/CheckForUpdates@current
+        uses: freddydk/AL-Go/Actions/CheckForUpdates@v3.0.1
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
@@ -90,7 +93,7 @@ jobs:
 
       - name: Finalize the workflow
         if: always()
-        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@current
+        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@v3.0.1
         with:
           shell: powershell
           eventId: "DO0098"

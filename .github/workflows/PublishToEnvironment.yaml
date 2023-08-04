@@ -28,91 +28,37 @@ jobs:
     runs-on: [ windows-latest ]
     outputs:
       telemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
+      settings: ${{ steps.ReadSettings.outputs.SettingsJson }}
       environments: ${{ steps.ReadSettings.outputs.EnvironmentsJson }}
       environmentCount: ${{ steps.ReadSettings.outputs.EnvironmentCount }}
-      unknownEnvironment: ${{ steps.ReadSettings.outputs.UnknownEnvironment }}
-      deviceCode: ${{ steps.Authenticate.outputs.deviceCode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Initialize the workflow
         id: init
-        uses: freddydk/AL-Go/Actions/WorkflowInitialize@current
+        uses: freddydk/AL-Go/Actions/WorkflowInitialize@v3.0.1
         with:
           shell: powershell
           eventId: "DO0097"
 
       - name: Read settings
         id: ReadSettings
-        uses: freddydk/AL-Go/Actions/ReadSettings@current
+        uses: freddydk/AL-Go/Actions/ReadSettings@v3.0.1
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
           getEnvironments: ${{ github.event.inputs.environmentName }}
           includeProduction: 'Y'
 
-      - name: EnvName
-        id: envName
-        if: steps.ReadSettings.outputs.UnknownEnvironment == 1
-        run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-          $envName = '${{ fromJson(steps.ReadSettings.outputs.environmentsJson).matrix.include[0].environment }}'.split(' ')[0]
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "envName=$envName"
-
-      - name: Read secrets
-        uses: freddydk/AL-Go/Actions/ReadSecrets@current
-        if: steps.ReadSettings.outputs.UnknownEnvironment == 1
-        env:
-          secrets: ${{ toJson(secrets) }}
-        with:
-          shell: powershell
-          parentTelemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
-          secrets: '${{ steps.envName.outputs.envName }}-AuthContext,${{ steps.envName.outputs.envName }}_AuthContext,AuthContext'
-
-      - name: Authenticate
-        id: Authenticate
-        if: steps.ReadSettings.outputs.UnknownEnvironment == 1
-        run: |
-          $envName = '${{ steps.envName.outputs.envName }}'
-          $secretName = ''
-          $authContext = $null
-          "$($envName)-AuthContext", "$($envName)_AuthContext", "AuthContext" | ForEach-Object {
-            if (!($authContext)) {
-              $authContext = [System.Environment]::GetEnvironmentVariable($_)
-              if ($authContext) {
-                Write-Host "Using $_ secret as AuthContext"
-                $secretName = $_
-              }
-            }            
-          }
-          if ($authContext) {
-            Write-Host "AuthContext provided in secret $secretName!"
-            Set-Content -Path $ENV:GITHUB_STEP_SUMMARY -value "AuthContext was provided in a secret called $secretName. Using this information for authentication."
-          }
-          else {
-            Write-Host "No AuthContext provided for $envName, initiating Device Code flow"
-            $ALGoHelperPath = "$([System.IO.Path]::GetTempFileName()).ps1"
-            $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadFile('https://raw.githubusercontent.com/freddydk/AL-Go/current/Actions/AL-Go-Helper.ps1', $ALGoHelperPath)
-            . $ALGoHelperPath
-            $BcContainerHelperPath = DownloadAndImportBcContainerHelper -baseFolder $ENV:GITHUB_WORKSPACE
-            $authContext = New-BcAuthContext -includeDeviceLogin -deviceLoginTimeout ([TimeSpan]::FromSeconds(0))
-            CleanupAfterBcContainerHelper -bcContainerHelperPath $bcContainerHelperPath
-            Set-Content -Path $ENV:GITHUB_STEP_SUMMARY -value "AL-Go needs access to the Business Central Environment $('${{ steps.envName.outputs.envName }}'.Split(' ')[0]) and could not locate a secret called ${{ steps.envName.outputs.envName }}_AuthContext`n`n$($authContext.message)"
-            Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "deviceCode=$($authContext.deviceCode)"
-          }
-
   Deploy:
     needs: [ Initialization ]
-    if: needs.Initialization.outputs.environmentCount > 0
+    if: ${{ needs.Initialization.outputs.environmentCount > 0 }}
     strategy: ${{ fromJson(needs.Initialization.outputs.environments) }}
     runs-on: ${{ fromJson(matrix.os) }}
     name: Deploy to ${{ matrix.environment }}
     environment:
       name: ${{ matrix.environment }}
-    env:
-      deviceCode: ${{ needs.Initialization.outputs.deviceCode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -120,27 +66,30 @@ jobs:
       - name: EnvName
         id: envName
         run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $ErrorActionPreference = "STOP"
+          Set-StrictMode -version 2.0
           $envName = '${{ matrix.environment }}'.split(' ')[0]
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "envName=$envName"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "envName=$envName"
 
       - name: Read settings
-        uses: freddydk/AL-Go/Actions/ReadSettings@current
+        uses: freddydk/AL-Go/Actions/ReadSettings@v3.0.1
         with:
           shell: powershell
 
       - name: Read secrets
-        uses: freddydk/AL-Go/Actions/ReadSecrets@current
+        uses: freddydk/AL-Go/Actions/ReadSecrets@v3.0.1
         env:
           secrets: ${{ toJson(secrets) }}
         with:
           shell: powershell
+          settingsJson: ${{ env.Settings }}
           secrets: '${{ steps.envName.outputs.envName }}-AuthContext,${{ steps.envName.outputs.envName }}_AuthContext,AuthContext,${{ steps.envName.outputs.envName }}-EnvironmentName,${{ steps.envName.outputs.envName }}_EnvironmentName,EnvironmentName,projects'
 
       - name: AuthContext
         id: authContext
         run: |
-          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          $ErrorActionPreference = "STOP"
+          Set-StrictMode -version 2.0
           $envName = '${{ steps.envName.outputs.envName }}'
           $deployToSettingStr = [System.Environment]::GetEnvironmentVariable("DeployTo$envName")
           if ($deployToSettingStr) {
@@ -150,9 +99,6 @@ jobs:
             $deployToSetting = [PSCustomObject]@{}
           }
           $authContext = $null
-          if ($env:deviceCode) {
-            $authContext = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("{""deviceCode"":""$($env:deviceCode)""}"))
-          }
           "$($envName)-AuthContext", "$($envName)_AuthContext", "AuthContext" | ForEach-Object {
             if (!($authContext)) {
               $authContext = [System.Environment]::GetEnvironmentVariable($_)
@@ -171,7 +117,7 @@ jobs:
           else {
             $environmentName = $null
             "$($envName)-EnvironmentName", "$($envName)_EnvironmentName", "EnvironmentName" | ForEach-Object {
-              if (!($EnvironmentName)) {
+              if (!($environmentName)) {
                 $EnvironmentName = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String([System.Environment]::GetEnvironmentVariable($_)))
                 if ($EnvironmentName) {
                   Write-Host "Using $_ secret as EnvironmentName"
@@ -203,15 +149,16 @@ jobs:
             $buildProjects = '${{ needs.Initialization.outputs.projects }}' | ConvertFrom-Json
             $projects = ($projects.Split(',') | Where-Object { $buildProjects -contains $_ }) -join ','
           }
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "authContext=$authContext"
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "environmentName=$environmentName"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "authContext=$authContext"
+          Write-Host "authContext=$authContext"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "environmentName=$environmentName"
           Write-Host "environmentName=$([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($environmentName)))"
           Write-Host "environmentName (as Base64)=$environmentName"
-          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "projects=$projects"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "projects=$projects"
           Write-Host "projects=$projects"
 
       - name: Deploy
-        uses: freddydk/AL-Go/Actions/Deploy@current
+        uses: freddydk/AL-Go/Actions/Deploy@v3.0.1
         env:
           AuthContext: ${{ steps.authContext.outputs.authContext }}
         with:
@@ -232,7 +179,7 @@ jobs:
 
       - name: Finalize the workflow
         id: PostProcess
-        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@current
+        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@v3.0.1
         with:
           shell: powershell
           eventId: "DO0097"
