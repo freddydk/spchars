@@ -1,14 +1,23 @@
-name: ' Test Next Major'
+name: 'Pull Request Build'
 
 on:
-  workflow_dispatch:
+  pull_request_target:
+    paths-ignore:
+      - '**.md'
+    branches: [ 'main' ]
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 defaults:
   run:
     shell: powershell
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
 
 env:
   workflowDepth: 1
@@ -16,7 +25,15 @@ env:
   ALGoRepoSettings: ${{ vars.ALGoRepoSettings }}
 
 jobs:
+  PregateCheck:
+    if: (github.event.pull_request.base.repo.full_name != github.event.pull_request.head.repo.full_name) && (github.event_name != 'pull_request')
+    runs-on: [ windows-latest ]
+    steps:
+      - uses: freddydk/AL-Go/Actions/VerifyPRChanges@PSScriptAnalyzer
+
   Initialization:
+    needs: [ PregateCheck ]
+    if: (!failure() && !cancelled())
     runs-on: [ windows-latest ]
     outputs:
       telemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
@@ -31,13 +48,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           lfs: true
+          ref: refs/pull/${{ github.event.number }}/merge
 
       - name: Initialize the workflow
         id: init
         uses: freddydk/AL-Go/Actions/WorkflowInitialize@PSScriptAnalyzer
         with:
           shell: powershell
-          eventId: "DO0099"
+          eventId: "DO0104"
 
       - name: Read settings
         id: ReadSettings
@@ -70,27 +88,25 @@ jobs:
     with:
       shell: ${{ needs.Initialization.outputs.githubRunnerShell }}
       runsOn: ${{ needs.Initialization.outputs.githubRunner }}
+      checkoutRef: refs/pull/${{ github.event.number }}/merge
       parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
       project: ${{ matrix.project }}
       projectName: ${{ matrix.projectName }}
       buildMode: ${{ matrix.buildMode }}
       projectDependenciesJson: ${{ needs.Initialization.outputs.projectDependenciesJson }}
-      secrets: 'licenseFileUrl,insiderSasToken,codeSignCertificateUrl,*codeSignCertificatePassword,keyVaultCertificateUrl,*keyVaultCertificatePassword,keyVaultClientId,gitHubPackagesContext,applicationInsightsConnectionString'
+      secrets: 'licenseFileUrl,insiderSasToken,keyVaultCertificateUrl,*keyVaultCertificatePassword,keyVaultClientId,gitHubPackagesContext,applicationInsightsConnectionString'
       publishThisBuildArtifacts: ${{ needs.Initialization.outputs.workflowDepth > 1 }}
-      artifactsNameSuffix: 'NextMajor'
 
-  PostProcess:
-    if: always()
+  StatusCheck:
     runs-on: [ windows-latest ]
     needs: [ Initialization, Build ]
+    if: (!cancelled())
+    name: Pull Request Status Check
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Finalize the workflow
-        id: PostProcess
-        uses: freddydk/AL-Go/Actions/WorkflowPostProcess@PSScriptAnalyzer
+      - name: Pull Request Status Check
+        id: PullRequestStatusCheck
+        uses: freddydk/AL-Go/Actions/PullRequestStatusCheck@PSScriptAnalyzer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           shell: powershell
-          eventId: "DO0099"
-          telemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
