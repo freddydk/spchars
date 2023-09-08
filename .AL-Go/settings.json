@@ -1,7 +1,8 @@
-{
+﻿{
   "country": "us",
   "appFolders": [],
   "testFolders": [],
   "bcptTestFolders": [],
-  "installApps": [ "Øøø_MyApp_6.0.46.0.app" ]
+  "installApps": [ "Øøø_MyApp_6.0.46.0.app" ],
+  "projectName": "æøå\"ÆØÅ\"\r\n'û'`r`n"
 }
